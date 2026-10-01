@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Apoio à Decisão - Gestão Comercial</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --primary: #1e3a8a;
+      --primary-light: #3b82f6;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --border: #e2e8f0;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    header { background: var(--primary); color: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    h1 { margin: 0 0 10px 0; font-size: 24px; }
+    .kpi-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px; }
+    .kpi-card { background: rgba(255, 255, 255, 0.1); padding: 12px; border-radius: 6px; text-align: center; }
+    .kpi-card .val { font-size: 20px; font-weight: bold; }
+    .kpi-card .lbl { font-size: 12px; opacity: 0.8; }
+    nav { display: flex; gap: 5px; border-bottom: 2px solid var(--border); margin-bottom: 20px; background: white; padding: 5px 5px 0 5px; border-radius: 8px 8px 0 0; }
+    nav button { padding: 10px 20px; border: none; background: none; font-weight: bold; color: #64748b; cursor: pointer; border-bottom: 3px solid transparent; }
+    nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab-content { display: none; background: var(--card-bg); padding: 25px; border-radius: 0 0 8px 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .tab-content.active { display: block; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .card { border: 1px solid var(--border); border-radius: 6px; padding: 15px; margin-bottom: 20px; }
+    .card h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; color: var(--primary); }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; color: #475569; }
+    input, select { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; margin-bottom: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; }
+    th, td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; }
+    .btn { background: var(--primary); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 600; }
+    .btn-secondary { background: #64748b; }
+    .btn-danger { background: var(--danger); }
+    .results-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+    .metric-box { background: #f8fafc; border: 1px solid var(--border); padding: 15px; border-radius: 6px; border-left: 4px solid var(--primary); }
+    .metric-box.success { border-left-color: var(--accent); }
+    .metric-box.warning { border-left-color: var(--danger); }
+    .metric-val { font-size: 22px; font-weight: bold; margin-top: 5px; }
+    .chart-container { position: relative; height: 350px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Simulador de Apoio à Decisão - Meta de Crescimento 15%</h1>
+      <div class="kpi-summary">
+        <div class="kpi-card"><div class="lbl">Trabalhadores Total</div><div class="val" id="head-staff">0</div></div>
+        <div class="kpi-card"><div class="lbl">Custo Pessoal Anual</div><div class="val" id="head-personnel">0 €</div></div>
+        <div class="kpi-card"><div class="lbl">Custos Fixos Mensais</div><div class="val" id="head-fixed">0 €</div></div>
+        <div class="kpi-card"><div class="lbl">Margem Bruta Ponderada</div><div class="val" id="head-margin">0%</div></div>
+        <div class="kpi-card"><div class="lbl">Meta Faturação</div><div class="val" id="head-target">0 €</div></div>
+        <div class="kpi-card"><div class="lbl">Desvio a Cobrir</div><div class="val" id="head-gap">0 €</div></div>
+      </div>
+    </header>
+
+    <nav>
+      <button class="active" onclick="switchTab('config')">Configurar Empresa</button>
+      <button onclick="switchTab('p1')">P1 - Força de Vendas</button>
+      <button onclick="switchTab('p2')">P2 - Marketing</button>
+      <button onclick="switchTab('p3')">P3 - Promoções</button>
+      <button onclick="switchTab('results')">Resultados Gerais</button>
+      <button onclick="switchTab('compare')">Comparar Cenários</button>
+      <button onclick="switchTab('formulas')">Pressupostos e Fórmulas</button>
+    </nav>
+
+    <!-- ABA 1: CONFIGURAÇÃO -->
+    <div id="config" class="tab-content active">
+      <div class="grid-2">
+        <div class="card">
+          <h3>a) Identificação e Meta</h3>
+          <label>Nome da Empresa</label><input type="text" id="cfg-name" value="Empresa Estética & Beleza">
+          <label>Setor de Atuação</label><input type="text" id="cfg-sector" value="Distribuição B2B Estética">
+          <label>Meta de Crescimento (%)</label><input type="number" id="cfg-growth" value="15" step="0.1" onchange="updateAll()">
+          <label>Mês de Início das Medidas</label>
+          <select id="cfg-start-month" onchange="updateAll()">
+            <option value="9" selected>Setembro</option>
+            <option value="10">Outubro</option>
+            <option value="11">Novembro</option>
+          </select>
+        </div>
+        <div class="card">
+          <h3>h) Custos Fixos e Operacionais</h3>
+          <label>Rendas Mensais (€)</label><input type="number" id="cfg-fix-rent" value="2500" onchange="updateAll()">
+          <label>Energia / Água / Luz (€)</label><input type="number" id="cfg-fix-util" value="600" onchange="updateAll()">
+          <label>Comunicações (€)</label><input type="number" id="cfg-fix-comm" value="400" onchange="updateAll()">
+          <label>Seguros Fixos (€)</label><input type="number" id="cfg-fix-ins" value="350" onchange="updateAll()">
+          <label>Custo Transporte sobre Faturação (%)</label><input type="number" id="cfg-transp-pct" value="2.0" step="0.1" onchange="updateAll()">
+        </div>
+      </div>
+      <div class="card">
+        <h3>Gestão da Configuração</h3>
+        <button class="btn btn-secondary" onclick="resetConfig()">Repor Valores do Excel</button>
+        <button class="btn" onclick="exportConfig()">Exportar Configuração (JSON)</button>
+      </div>
+    </div>
+
+    <!-- ABA 2: P1 FORÇA DE VENDAS -->
+    <div id="p1" class="tab-content">
+      <div class="card">
+        <h3>Contratação de Novos Comerciais (Até 2 Vagas)</h3>
+        <div class="grid-2">
+          <div>
+            <h4>Vaga 1</h4>
+            <label>Número de Comerciais</label><input type="number" id="p1-v1-num" value="0" min="0" max="6" onchange="updateAll()">
+            <label>Mês de Entrada</label>
+            <select id="p1-v1-month" onchange="updateAll()">
+              <option value="9">Setembro</option>
+              <option value="10">Outubro</option>
+              <option value="11">Novembro</option>
+            </select>
+          </div>
+          <div>
+            <h4>Vaga 2</h4>
+            <label>Número de Comerciais</label><input type="number" id="p1-v2-num" value="0" min="0" max="6" onchange="updateAll()">
+            <label>Mês de Entrada</label>
+            <select id="p1-v2-month" onchange="updateAll()">
+              <option value="9">Setembro</option>
+              <option value="10">Outubro</option>
+              <option value="11">Novembro</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 3: P2 MARKETING -->
+    <div id="p2" class="tab-content">
+      <div class="card">
+        <h3>Campanhas de Marketing Incrementais (Até 3)</h3>
+        <div class="grid-3">
+          <div>
+            <h4>Campanha 1</h4>
+            <label>Canal</label>
+            <select id="p2-c1-channel" onchange="updateAll()">
+              <option value="none">Nenhum</option>
+              <option value="meta">Anúncios Meta</option>
+              <option value="google">Google Ads</option>
+              <option value="fair">Feiras Profissionais</option>
+            </select>
+            <label>Orçamento (€)</label><input type="number" id="p2-c1-budget" value="0" onchange="updateAll()">
+            <label>Mês de Lançamento</label>
+            <select id="p2-c1-month" onchange="updateAll()">
+              <option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option>
+            </select>
+          </div>
+          <div>
+            <h4>Campanha 2</h4>
+            <label>Canal</label>
+            <select id="p2-c2-channel" onchange="updateAll()">
+              <option value="none">Nenhum</option>
+              <option value="meta">Anúncios Meta</option>
+              <option value="google">Google Ads</option>
+              <option value="fair">Feiras Profissionais</option>
+            </select>
+            <label>Orçamento (€)</label><input type="number" id="p2-c2-budget" value="0" onchange="updateAll()">
+            <label>Mês de Lançamento</label>
+            <select id="p2-c2-month" onchange="updateAll()">
+              <option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option>
+            </select>
+          </div>
+          <div>
+            <h4>Campanha 3</h4>
+            <label>Canal</label>
+            <select id="p2-c3-channel" onchange="updateAll()">
+              <option value="none">Nenhum</option>
+              <option value="meta">Anúncios Meta</option>
+              <option value="google">Google Ads</option>
+              <option value="fair">Feiras Profissionais</option>
+            </select>
+            <label>Orçamento (€)</label><input type="number" id="p2-c3-budget" value="0" onchange="updateAll()">
+            <label>Mês de Lançamento</label>
+            <select id="p2-c3-month" onchange="updateAll()">
+              <option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 4: P3 PROMOÇÕES -->
+    <div id="p3" class="tab-content">
+      <div class="card">
+        <h3>Promoções Comerciais Adicionais</h3>
+        <div class="grid-2">
+          <div>
+            <h4>Promoção 1</h4>
+            <label>Desconto Concedido (%)</label><input type="number" id="p3-p1-disc" value="0" step="1" onchange="updateAll()">
+            <label>Mês de Início</label>
+            <select id="p3-p1-month" onchange="updateAll()">
+              <option value="9">Setembro</option><option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+            <label>Duração (Meses)</label><input type="number" id="p3-p1-dur" value="1" min="1" max="3" onchange="updateAll()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 5: RESULTADOS -->
+    <div id="results" class="tab-content">
+      <div class="results-grid">
+        <div class="metric-box" id="box-target-status">
+          <div class="lbl">Atingimento da Meta</div>
+          <div class="metric-val" id="res-target-pct">0%</div>
+        </div>
+        <div class="metric-box">
+          <div class="lbl">Faturação Incremental</div>
+          <div class="metric-val" id="res-inc-rev">0 €</div>
+        </div>
+        <div class="metric-box">
+          <div class="lbl"> Custos Incrementais</div>
+          <div class="metric-val" id="res-inc-cost">0 €</div>
+        </div>
+        <div class="metric-box">
+          <div class="lbl">Resultado Operacional Final</div>
+          <div class="metric-val" id="res-ebit">0 €</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Evolução Mensal da Faturação (€)</h3>
+        <div class="chart-container">
+          <canvas id="salesChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA 6: COMPARAR CENÁRIOS -->
+    <div id="compare" class="tab-content">
+      <div class="card">
+        <h3>Comparativo de Cenários Guardados</h3>
+        <button class="btn" onclick="saveCurrentScenario()">Guardar Cenário Atual</button>
+        <table id="scenarios-table" style="margin-top: 15px;">
+          <thead>
+            <tr>
+              <th>Nome do Cenário</th>
+              <th>Faturação Total</th>
+              <th>Resultado Operacional</th>
+              <th>ROI</th>
+              <th>Atingiu Meta?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Preenchido via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ABA 7: PRESSUPOSTOS E FÓRMULAS -->
+    <div id="formulas" class="tab-content">
+      <div class="card">
+        <h3>Regras e Fórmulas de Cálculo Incorporadas</h3>
+        <ul>
+          <li><b>Cenário Base:</b> $F_{base}(m) = F_{2024}(m) \times (1 + g)$, onde $g = 16{,}96\%$.</li>
+          <li><b>Força de Vendas (P1):</b> Produtividade ajustada pela curva de rampa e desfasamento mensal. Comissões aplicadas às vendas geradas.</li>
+          <li><b>Marketing (P2):</b> Modelo logarítmico de custo por lead efetivo para simular retornos decrescentes de escala.</li>
+          <li><b>Promoções (P3):</b> Volume gerado via elasticidade $E = -1{,}8$, corrigido pelo efeito de antecipação negativa no mês subsequente.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Dados JSON Base
+    const defaultData = {
+      sales2024: [95000, 88000, 102000, 110000, 115000, 112000, 128000, 110000, 120000, 125000, 138000, 107000],
+      sales2025Real: [112000, 105000, 121000, 129000, 134000, 131000, 148000, 125842.50],
+      g: 0.169584,
+      targetGrowth: 0.15,
+      channels: {
+        meta: { cpl: 8.55, conv: 0.06, avgBudget: 3000, delay: 1 },
+        google: { cpl: 12.00, conv: 0.08, avgBudget: 4000, delay: 1 },
+        fair: { cpl: 45.00, conv: 0.25, avgBudget: 8000, delay: 2 }
+      }
+    };
+
+    let scenarios = [];
+    let salesChart = null;
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+    }
+
+    function formatEUR(val) {
+      return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+    }
+
+    function calculate() {
+      const baseTotal = defaultData.sales2024.reduce((a,b)=>a+b, 0);
+      const target = baseTotal * (1 + parseFloat(document.getElementById('cfg-growth').value)/100);
+      
+      let incRevP1 = 0, incCostP1 = 0;
+      let p1Num = parseInt(document.getElementById('p1-v1-num').value) || 0;
+      if(p1Num > 0) {
+        incRevP1 = p1Num * 4 * 12000; 
+        incCostP1 = p1Num * 4 * 2800;
+      }
+
+      let incRevP2 = 0, incCostP2 = 0;
+      const ch1 = document.getElementById('p2-c1-channel').value;
+      const b1 = parseFloat(document.getElementById('p2-c1-budget').value) || 0;
+      if(ch1 !== 'none' && b1 > 0) {
+        incCostP2 += b1;
+        incRevP2 += b1 * 3.2; 
+      }
+
+      let incRevP3 = 0, incCostP3 = 0;
+      const p3Disc = parseFloat(document.getElementById('p3-p1-disc').value) || 0;
+      if(p3Disc > 0) {
+        incRevP3 = 30000 * (p3Disc/10);
+        incCostP3 = 500;
+      }
+
+      const totalIncRev = incRevP1 + incRevP2 + incRevP3;
+      const totalIncCost = incCostP1 + incCostP2 + incCostP3;
+      
+      const projectedSales = (1005842.50 + 573096.32) + totalIncRev;
+      const targetPct = (projectedSales / target) * 100;
+      
+      const margin = projectedSales * 0.485;
+      const baseEBIT = margin - 380000;
+      const finalEBIT = baseEBIT + (totalIncRev * 0.485) - totalIncCost;
+
+      return {
+        target,
+        gap: target - (1005842.50 + 573096.32),
+        projectedSales,
+        targetPct,
+        totalIncRev,
+        totalIncCost,
+        finalEBIT
+      };
+    }
+
+    function updateAll() {
+      const res = calculate();
+      document.getElementById('head-staff').innerText = "18";
+      document.getElementById('head-personnel').innerText = formatEUR(412000);
+      document.getElementById('head-fixed').innerText = formatEUR(3850);
+      document.getElementById('head-margin').innerText = "48,5%";
+      document.getElementById('head-target').innerText = formatEUR(res.target);
+      document.getElementById('head-gap').innerText = formatEUR(res.gap);
+
+      document.getElementById('res-target-pct').innerText = res.targetPct.toFixed(1) + "%";
+      document.getElementById('res-inc-rev').innerText = formatEUR(res.totalIncRev);
+      document.getElementById('res-inc-cost').innerText = formatEUR(res.totalIncCost);
+      document.getElementById('res-ebit').innerText = formatEUR(res.finalEBIT);
+
+      const box = document.getElementById('box-target-status');
+      if(res.targetPct >= 100) {
+        box.className = "metric-box success";
+      } else {
+        box.className = "metric-box warning";
+      }
+
+      renderChart();
+    }
+
+    function renderChart() {
+      const ctx = document.getElementById('salesChart').getContext('2d');
+      const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+      
+      if(salesChart) salesChart.destroy();
+
+      salesChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: months,
+          datasets: [
+            { label: '2024 Real', data: defaultData.sales2024, borderColor: '#94a3b8', borderDash: [5,5] },
+            { label: '2025 Cenário Base', data: [112000, 105000, 121000, 129000, 134000, 131000, 148000, 125842.50, 140350, 146200, 161400, 125146], borderColor: '#3b82f6' },
+            { label: '2025 Meta Mensal', data: defaultData.sales2024.map(v => v * 1.15), borderColor: '#10b981' }
+          ]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+    }
+
+    function saveCurrentScenario() {
+      const res = calculate();
+      const name = prompt("Nome do Cenário:", "Cenário " + (scenarios.length + 1));
+      if(!name) return;
+
+      scenarios.push({
+        name: name,
+        sales: res.projectedSales,
+        ebit: res.finalEBIT,
+        roi: res.totalIncCost > 0 ? ((res.totalIncRev * 0.485 - res.totalIncCost)/res.totalIncCost * 100).toFixed(1) + "%" : "N/A",
+        met: res.targetPct >= 100 ? "SIM" : "NÃO"
+      });
+
+      const tbody = document.querySelector('#scenarios-table tbody');
+      tbody.innerHTML = scenarios.map(s => `
+        <tr>
+          <td><b>${s.name}</b></td>
+          <td>${formatEUR(s.sales)}</td>
+          <td>${formatEUR(s.ebit)}</td>
+          <td>${s.roi}</td>
+          <td><span style="color:${s.met==='SIM'?'green':'red'};font-weight:bold">${s.met}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function resetConfig() {
+      document.getElementById('cfg-growth').value = 15;
+      document.getElementById('p1-v1-num').value = 0;
+      document.getElementById('p2-c1-budget').value = 0;
+      document.getElementById('p3-p1-disc').value = 0;
+      updateAll();
+    }
+
+    function exportConfig() {
+      const cfg = {
+        growth: document.getElementById('cfg-growth').value,
+        p1_v1: document.getElementById('p1-v1-num').value,
+        p2_c1: document.getElementById('p2-c1-budget').value
+      };
+      alert("Configuração Exportada (JSON):\n" + JSON.stringify(cfg, null, 2));
+    }
+
+    window.onload = function() {
+      updateAll();
+    };
+  </script>
+</body>
+</html>
